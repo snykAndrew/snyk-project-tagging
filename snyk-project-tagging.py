@@ -53,13 +53,12 @@ def get_org_projects():
         organizations = client.organizations.all()
 
         for org in organizations:
-            if org.name == "snykMathesOrg":
-                projects = org.projects.all()
-                
-                for project in projects:
-                    if project.remoteRepoUrl not in all_remote_repo_urls:
-                        all_remote_repo_urls.append(project.remoteRepoUrl)
-                        get_scm_repo_status(project.remoteRepoUrl)
+            projects = org.projects.all()
+            
+            for project in projects:
+                if project.remoteRepoUrl not in all_remote_repo_urls:
+                    all_remote_repo_urls.append(project.remoteRepoUrl)
+                    get_scm_repo_status(project.remoteRepoUrl)
 
 def apply_snyk_org_tags():
     with create_client(token=token, tenant="us") as client:
@@ -67,23 +66,22 @@ def apply_snyk_org_tags():
         organizations = client.organizations.all()
 
         for org in organizations:
-            if org.name == "snykMathesOrg":
-                projects = org.projects.all()
-                
-                for project in projects:
-                    print("\nupdate project tags: " + project.name)
-                    delete_tags(project)
-                    if project.remoteRepoUrl in remote_repos_stale:
-                        #delete_tag(project, "active_repo", "true")
-                        add_tag(project, "active_repo", "false")
-                        print("project tagged inactive \n")
-                        set_project_criticality(org, project, "low")
-                    else:
-                        #delete_tag(project, "active_repo", "false")
-                        add_tag(project, "active_repo", "true")
-                        print("project tagged active \n")
-                        set_project_criticality(org, project, "high")
-                    print("\n")
+            projects = org.projects.all()
+            
+            for project in projects:
+                print("\nupdate project tags: " + project.name)
+                delete_tags(project)
+                if project.remoteRepoUrl in remote_repos_stale:
+                    #delete_tag(project, "active_repo", "true")
+                    add_tag(project, "active_repo", "false")
+                    print("project tagged inactive \n")
+                    set_project_criticality(org, project, "low")
+                else:
+                    #delete_tag(project, "active_repo", "false")
+                    add_tag(project, "active_repo", "true")
+                    print("project tagged active \n")
+                    set_project_criticality(org, project, "high")
+                print("\n")
 
 #remove stale tags
 def delete_tags(project):
