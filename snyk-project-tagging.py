@@ -15,7 +15,7 @@ Description: Program meant to:
  query types of targets in orgs
  tag github with those targets to run enforcement
 '''
-token = os.getenv('SNYK_API_TOKEN') # Set your API token as an environment variable
+token = os.getenv('SNYK_TOKEN') # Set your API token as an environment variable
 apiVersion = "2024-10-15"  # Set the API version. Needs ~beta endpoint at stated version or later
 tries = 4  # Number of retries
 delay = 1  # Delay between retries
@@ -48,40 +48,42 @@ def get_org_projects():
     #open_source_types = ['apk','cocoapods', 'composer', 'cpp', 'deb', 'golang', 'gradle', 'maven', 'npm', 'nuget', 'pip', 'pipenv', 'poetry', 'rubygems', 'sbt', 'swift', 'yarn']
     #iac_types = ['cloudformationconfig', 'armconfig', 'dockerfile', 'helm', 'k8sconfig', 'terraformconfig']
 
-    client = snyk.SnykClient(token, tries=tries, delay=delay, backoff=backoff)  # Context switch the client to model-based
-    organizations = client.organizations.all()
+    with create_client(token=token, tenant="us") as client:
+        #client = snyk.SnykClient(token, tries=tries, delay=delay, backoff=backoff)  # Context switch the client to model-based
+        organizations = client.organizations.all()
 
-    for org in organizations:
-        if org.name == "snykMathesOrg":
-            projects = org.projects.all()
-            
-            for project in projects:
-                if project.remoteRepoUrl not in all_remote_repo_urls:
-                    all_remote_repo_urls.append(project.remoteRepoUrl)
-                    get_scm_repo_status(project.remoteRepoUrl)
+        for org in organizations:
+            if org.name == "snykMathesOrg":
+                projects = org.projects.all()
+                
+                for project in projects:
+                    if project.remoteRepoUrl not in all_remote_repo_urls:
+                        all_remote_repo_urls.append(project.remoteRepoUrl)
+                        get_scm_repo_status(project.remoteRepoUrl)
 
 def apply_snyk_org_tags():
-    client = snyk.SnykClient(token, tries=tries, delay=delay, backoff=backoff)  # Context switch the client to model-based
-    organizations = client.organizations.all()
+    with create_client(token=token, tenant="us") as client:
+        #client = snyk.SnykClient(token, tries=tries, delay=delay, backoff=backoff)  # Context switch the client to model-based
+        organizations = client.organizations.all()
 
-    for org in organizations:
-        if org.name == "snykMathesOrg":
-            projects = org.projects.all()
-            
-            for project in projects:
-                print("\nupdate project tags: " + project.name)
-                delete_tags(project)
-                if project.remoteRepoUrl in remote_repos_stale:
-                    #delete_tag(project, "active_repo", "true")
-                    add_tag(project, "active_repo", "false")
-                    print("project tagged inactive \n")
-                    set_project_criticality(org, project, "low")
-                else:
-                    #delete_tag(project, "active_repo", "false")
-                    add_tag(project, "active_repo", "true")
-                    print("project tagged active \n")
-                    set_project_criticality(org, project, "high")
-                print("\n")
+        for org in organizations:
+            if org.name == "snykMathesOrg":
+                projects = org.projects.all()
+                
+                for project in projects:
+                    print("\nupdate project tags: " + project.name)
+                    delete_tags(project)
+                    if project.remoteRepoUrl in remote_repos_stale:
+                        #delete_tag(project, "active_repo", "true")
+                        add_tag(project, "active_repo", "false")
+                        print("project tagged inactive \n")
+                        set_project_criticality(org, project, "low")
+                    else:
+                        #delete_tag(project, "active_repo", "false")
+                        add_tag(project, "active_repo", "true")
+                        print("project tagged active \n")
+                        set_project_criticality(org, project, "high")
+                    print("\n")
 
 #remove stale tags
 def delete_tags(project):
@@ -107,7 +109,7 @@ def create_client(token: str, tenant: str) -> httpx.Client:
     base_url = (
         f"https://api.{tenant}.snyk.io/rest"
         if tenant in ["eu", "au"]
-        else "https://api.snyk.io/rest"
+        else "https://api.us.snyk.io/rest"
     )
     headers = {
         'Accept': 'application/vnd.api+json',
@@ -148,7 +150,7 @@ def apply_criticality_to_project(
 def get_scm_repo_status(repo_path):
     headers = {
         'Accept': 'application/vnd.github+json',
-        'Authorization': "Bearer " + os.getenv('GITHUB_APITOKEN'),
+        'Authorization': "Bearer " + os.getenv('GITHUB_TOKEN'),
         'User-Agent' : 'python script', 
         'X-GitHub-Api-Version': '2022-11-28',
     }
