@@ -99,7 +99,7 @@ def add_tag(project, key, value):
             project.tags.add(key, value)
 
 def set_project_criticality(org, project, criticality):
-    with create_client(token="870016aa-3348-4056-87b5-b6a42b067b59", tenant="us") as client:
+    with create_client(token=token, tenant="us") as client:
         apply_criticality_to_project(client, org.id, project.id, criticality, project.name)
 
 # Reach to the API and generate tokens
