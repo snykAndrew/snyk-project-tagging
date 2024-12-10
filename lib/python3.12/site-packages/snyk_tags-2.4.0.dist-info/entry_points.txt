@@ -1,0 +1,3 @@
+[console_scripts]
+snyk-tags=snyk_tags.tags:app
+

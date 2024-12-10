@@ -1,0 +1,5 @@
+/.dccache
+/.python-version
+/getOrgsOutput
+/getOrgsOutput.json
+/snyk-issues-orig.py
