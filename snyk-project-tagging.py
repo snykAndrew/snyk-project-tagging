@@ -18,6 +18,7 @@ Description: Program meant to:
 token = os.getenv('SNYK_TOKEN') # Set your API token as an environment variable
 github_token = os.getenv('GITHUB_TOKEN')
 snyk_url = "https://api.us.snyk.io/rest" #os.getenv('SNYK_URL')
+v1_snyk_url = "https://api.us.snyk.io/v1" #os.getenv('SNYK_URL')
 apiVersion = "2024-10-15"  # Set the API version. Needs ~beta endpoint at stated version or later
 
 tries = 4  # Number of retries
@@ -80,52 +81,23 @@ def get_org_projects_rest():
     rest_client = snyk.SnykClient(token, tries=tries, delay=delay, backoff=backoff, version=apiVersion, url=snyk_url)  # Context switch the client to model-based
     print("getting orgs")
 
-    organizations = rest_client.get(f"/orgs/").json()
-    #print("orgs retrieved: " +  str(organizations) )
+    organizations = rest_client.get_rest_pages(f"/orgs/")
+    print("orgs retrieved: " +  str(organizations) )
 
-    for org in organizations["data"]:
+    for org in organizations:
         #print("getting projects for org: " + str(org))    
         
-        targets = rest_client.get(f"/orgs/{org['id']}/targets").json()
+        targets = rest_client.get_rest_pages(f"/orgs/{org['id']}/targets")
         all_snyk_targets.append(targets)
 
         #print("geting repos for projects: " + str(projects))
-        for target in targets["data"]:
+        for target in targets:
             print("project: " + str(target))
             targetUrl = target["attributes"]["url"]
+
             if targetUrl not in all_remote_repo_urls:
                 all_remote_repo_urls.append(targetUrl)
                 get_scm_repo_status(targetUrl)
-
-def get_org_projects_api():
-    #open_source_types = ['apk','cocoapods', 'composer', 'cpp', 'deb', 'golang', 'gradle', 'maven', 'npm', 'nuget', 'pip', 'pipenv', 'poetry', 'rubygems', 'sbt', 'swift', 'yarn']
-    #iac_types = ['cloudformationconfig', 'armconfig', 'dockerfile', 'helm', 'k8sconfig', 'terraformconfig']
-
-    with create_client(token=token, tenant="us") as client: # Context switch the client to model-based
-        print("getting orgs")
-
-        group_id = "b73145ee-8c2c-42e1-a79c-a1a7b9a7c79d"
-        req = client.get(f"/groups/{group_id}/orgs", timeout=None)
-        print("REQUEST text: " + str(req.text))
-
-        if req.status_code == 200:
-            print(f"Successfully retrieved orgs.: ")
-        else:
-            print("error retrieving orgs")
-            exit()
-
-        #print("orgs retrieved: " + str(organizations))
-
-        #for org in organizations:
-        #    print("getting projects for org: " + org.name)    
-        #    projects = org.projects.all()
-
-        #    print("geting repos per project")
-        #    for project in projects:
-        #        if project.remoteRepoUrl not in all_remote_repo_urls:
-        #            print("getting remote repo for project: " + project.name)
-        #            all_remote_repo_urls.append(project.remoteRepoUrl)
-        #            get_scm_repo_status(project.remoteRepoUrl)
 
 def apply_snyk_org_tags():
     #with create_client(token=token, tenant="us") as client:
@@ -134,9 +106,11 @@ def apply_snyk_org_tags():
 
     for org in organizations:
         projects = org.projects.all()
+
+        #print("PROJECTS FOUND: " + str(projects))
         
         for project in projects:
-            print("\nupdate project tags: " + project.name)
+            #print("\nupdate project tags: " + project.name)
             delete_tags(project)
             if project.remoteRepoUrl in remote_repos_stale:
                 #delete_tag(project, "active_repo", "true")
@@ -152,37 +126,43 @@ def apply_snyk_org_tags():
 
 def apply_snyk_org_tags_rest():
     #with create_client(token=token, tenant="us") as client:
-    rest_client = snyk.SnykClient(token, tries=tries, delay=delay, backoff=backoff, version=apiVersion, url=snyk_url)  # Context switch the client to model-based
+    rest_client = snyk.SnykClient(token, tries=tries, delay=delay, backoff=backoff, version=apiVersion, url=snyk_url)
+    v1_client = snyk.SnykClient(token, tries=tries, delay=delay, backoff=backoff, url=v1_snyk_url)   # Context switch the client to model-based
     print("getting orgs")
 
-    organizations = rest_client.get(f"/orgs/").json()
+    organizations = rest_client.get_rest_pages(f"/orgs/")
     #organizations = client.organizations.all()
 
-    for org in organizations["data"]:
-        projects = rest_client.get(f"/orgs/{org["id"]}/projects").json()
+    for org in organizations:
+        projects = rest_client.get_rest_pages(f"/orgs/{org['id']}/projects")
         #projects = org.projects.all()
+
+        #print("PROJECTS FOUND: " + str(projects))
         
-        for project in projects["data"]:
-            print("\nupdate project tags: " + str(project))
+        for project in projects:
+            #print("\nupdate project tags: " + str(project))
 
             #get remoteRepoUrl from target
             targetId = project["relationships"]["target"]["data"]["id"]
 
             print("found related targetId: " + str(targetId))
-
-            target = rest_client.get(f"/orgs/{org["id"]}/targets/{targetId}").json()
+            target = rest_client.get(f"/orgs/{org['id']}/targets/{targetId}").json()
             print("found related target: " + str(target))
 
-            if target["data"]["attributes"]["url"] in remote_repos_stale:
+            targetUrl = target["data"]["attributes"]["url"]
+
+            if targetUrl in remote_repos_stale:
                 tags = [{"key": "active_repo", "value": "false"}]
                 with create_client(token=token, tenant="us") as client:
-                    print("UPDATING")
                     apply_criticality_to_project(client, org["id"], project["id"], "low", project["attributes"]["name"], tags)
             else:
                 tags = [{"key": "active_repo", "value": "true"}]
                 with create_client(token=token, tenant="us") as client:
-                    print("UPDATING2")
                     apply_criticality_to_project(client, org["id"], project["id"], "high", project["attributes"]["name"], tags)
+
+            if targetUrl in remote_repos_archived:
+                print(f"hitting url: /orgs/{org['id']}/projects/{project['id']}/deactivate")
+                v1_client.post(f"/org/{org['id']}/project/{project['id']}/deactivate", body={}, headers={"Content-Type": "application/vnd.api+json"}).json()
 
             print("\n")          
 
@@ -240,7 +220,7 @@ def apply_criticality_to_project(
     
     params = {'version': apiVersion}
     req = client.patch(f"orgs/{org_id}/projects/{project_id}", json=attribute_data, params=params, timeout=None)
-    print("REQUEST text: " + str(req.text))
+    #print("REQUEST text: " + str(req.text))
 
     if req.status_code == 200:
         print(f"Successfully added {criticality} criticality to Project: {project_name}.")
@@ -271,6 +251,11 @@ def get_scm_repo_status(repo_path):
         json_obj = json.loads(response_data.decode())
         pushed_at_date = json_obj['pushed_at']
         print(repo_path + " data is: " + pushed_at_date)
+
+        print("ARCHIVE STATUS: " + str(json_obj['archived']))
+        if json_obj['archived']:
+            if repo_path not in remote_repos_archived:
+                remote_repos_archived.append(repo_path)
 
         days_since_push = days_ago(datetime.strptime(pushed_at_date, "%Y-%m-%dT%H:%M:%SZ")) 
         print(repo_path + " days since push is: " + str(days_since_push))
