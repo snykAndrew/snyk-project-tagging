@@ -32,7 +32,6 @@ remote_repos_scanned = []
 remote_repos_stale = []
 remote_repos_archived = []
 
-
 def search_json(json_obj, search_string):
     if isinstance(json_obj, dict):
         for key, value in json_obj.items():
@@ -237,6 +236,7 @@ def get_scm_repo_status(repo_path):
         'X-GitHub-Api-Version': '2022-11-28',
     }
 
+    print("\n")
     if repo_path is not None:
         print("processing repo_path: " + repo_path)
         github_Org, repo_name = repo_path.split("/")[-2:]
@@ -249,20 +249,31 @@ def get_scm_repo_status(repo_path):
         conn.close()
 
         json_obj = json.loads(response_data.decode())
-        pushed_at_date = json_obj['pushed_at']
-        print(repo_path + " data is: " + pushed_at_date)
 
-        print("ARCHIVE STATUS: " + str(json_obj['archived']))
-        if json_obj['archived']:
-            if repo_path not in remote_repos_archived:
-                remote_repos_archived.append(repo_path)
+        #print("\n\n\ngithub object: " + str(json_obj))
+        if 'status' in json_obj and json_obj['status'] == '404':
+            print("cannot access repo: " + repo_path + " with this key (unauthorized (404) for this resource)")
+        elif 'status' in json_obj and json_obj['status'] == '401':
+            print("cannot access repo: " + repo_path + " : bad credentials (401) (invalid github token)")
+        elif 'pushed_at' in json_obj and 'archived' in json_obj:
+            pushed_at_date = json_obj['pushed_at']
+            print(repo_path + " data is: " + pushed_at_date)
 
-        days_since_push = days_ago(datetime.strptime(pushed_at_date, "%Y-%m-%dT%H:%M:%SZ")) 
-        print(repo_path + " days since push is: " + str(days_since_push))
+            print("ARCHIVE STATUS: " + str(json_obj['archived']))
+            if json_obj['archived']:
+                if repo_path not in remote_repos_archived:
+                    remote_repos_archived.append(repo_path)
 
-        if days_since_push > 90:
-            remote_repos_stale.append(repo_path)
-            print("added to stale repos")
+            days_since_push = days_ago(datetime.strptime(pushed_at_date, "%Y-%m-%dT%H:%M:%SZ")) 
+            print(repo_path + " days since push is: " + str(days_since_push))
+
+            if days_since_push > 90:
+                remote_repos_stale.append(repo_path)
+                print("added to stale repos")
+        else:
+            print("cannot access repo: " + repo_path + " - unknown reason - response:" + str(json_obj))
+
+        #line break for next project
         print("\n")
 
 if __name__ == '__main__':
